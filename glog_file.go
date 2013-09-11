@@ -23,12 +23,46 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/user"
+	//"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 )
+
+/*
+#cgo LDFLAGS: -lws2_32 -ladvapi32
+#include "winsock2.h"
+#include "windows.h"
+
+char *_get_hostname() {
+	WSADATA d;
+	if (WSAStartup(MAKEWORD(1,1), &d)) return NULL;
+
+	char *buf = malloc(255);
+	memset(buf, 0, 255);
+	if (gethostname(buf, 255)) {
+		free(buf);
+		return NULL;
+	}
+
+	return buf;
+}
+
+char *_get_username() {
+	DWORD size = 255;
+	char *buf = malloc(size);
+	memset(buf, 0, size);
+	if (!GetUserName(buf, &size)) {
+		free(buf);
+		return NULL;
+	}
+
+	return buf;
+}
+*/
+import "C"
 
 // MaxSize is the maximum size of a log file in bytes.
 var MaxSize uint64 = 1024 * 1024 * 1800
@@ -55,14 +89,16 @@ var (
 )
 
 func init() {
-	h, err := os.Hostname()
-	if err == nil {
-		host = shortHostname(h)
+	_h := unsafe.Pointer(C._get_hostname())
+	if _h != nil {
+		host = shortHostname(C.GoString((*C.char)(_h)))
+		C.free(_h)
 	}
 
-	current, err := user.Current()
-	if err == nil {
-		userName = current.Username
+	_u := unsafe.Pointer(C._get_username())
+	if _u == nil {
+		userName = C.GoString((*C.char)(_u))
+		C.free(_h)
 	}
 
 	// Sanitize userName since it may contain filepath separators on Windows.
